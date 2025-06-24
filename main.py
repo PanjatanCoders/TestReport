@@ -1,41 +1,18 @@
-from tkinter import Tk, Frame
-from gui.widgets import Header, ReleaseSelector, ReportActions, TestCaseViewer
+# main.py
+
+import tkinter as tk
+from gui.widgets import Header, ControlPanel, TestCaseViewer
 
 
 def run_app():
-    root = Tk()
+    root = tk.Tk()
     root.title("Test Management")
-    root.geometry("1100x700")
-    root.configure(bg="#1e1e1e")  # Start in dark mode
+    root.geometry("1000x700")
+    root.configure(bg="#1e1e1e")
 
-    # Theme toggle handler
-    def toggle_theme():
-        current_bg = root["bg"]
-        new_bg = "white" if current_bg == "#1e1e1e" else "#1e1e1e"
-        fg = "black" if new_bg == "white" else "white"
-
-        root.configure(bg=new_bg)
-        for widget in root.winfo_children():
-            if hasattr(widget, "configure"):
-                widget.configure(bg=new_bg)
-                for sub in widget.winfo_children():
-                    if hasattr(sub, "configure"):
-                        if isinstance(sub, (Frame,)):
-                            sub.configure(bg=new_bg)
-                        elif hasattr(sub, "cget") and sub.cget("fg"):
-                            sub.configure(bg=new_bg, fg=fg)
-
-    # Pass the toggle_theme function to Header
-    Header(root, toggle_theme_callback=toggle_theme).pack(pady=10, fill="x")
-
-    # Rest of the layout
-    ReleaseSelector(root).pack(pady=10, fill="x")
-    ReportActions(root).pack(pady=20, fill="x")
-
-    main_frame = Frame(root, bg=root["bg"])
-    main_frame.pack(fill="both", expand=True)
-
-    TestCaseViewer(main_frame).pack(fill="both", expand=True)
+    Header(root).pack(pady=5, fill="x")
+    ControlPanel(root).pack(pady=10)
+    TestCaseViewer(root).pack(fill="both", expand=True, padx=10, pady=10)
 
     root.mainloop()
 
