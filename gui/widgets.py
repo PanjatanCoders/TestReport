@@ -1,5 +1,5 @@
 # gui/widgets.py
-
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
@@ -31,35 +31,40 @@ class Header(tk.Frame):
         label.pack(pady=10)
 
 
-class ControlPanel(tk.Frame):
+class ControlPanel(tk.LabelFrame):  # LabelFrame gives a bordered container with title
     def __init__(self, parent):
-        super().__init__(parent, bg=parent["bg"])
+        super().__init__(parent, text="Release Actions", padx=10, pady=10, bg=parent["bg"], fg="white")
 
         self.releases = fetch_all_releases()
         self.selected_release = tk.StringVar()
 
-        label = tk.Label(self, text="Select Release:", fg="white", bg=self["bg"])
-        label.grid(row=0, column=0, padx=10, pady=5)
-
+        # Dropdown to select release
+        tk.Label(self, text="Select Release:", fg="white", bg=self["bg"]).grid(row=0, column=0, padx=5, pady=5)
         self.dropdown = ttk.Combobox(
-            self,
-            textvariable=self.selected_release,
-            values=self.releases,
-            state="readonly",
-            width=30,
+            self, textvariable=self.selected_release, values=self.releases, state="readonly", width=30
         )
-        self.dropdown.grid(row=0, column=1, padx=5)
+        self.dropdown.grid(row=0, column=1, padx=5, pady=5)
         if self.releases:
             self.selected_release.set(self.releases[0])
 
-        self.create_btn = ttk.Button(self, text="➕ Create Release", command=self.add_release)
-        self.create_btn.grid(row=0, column=2, padx=10)
+        # Create Release Button
+        self.create_btn = tk.Button(self, text="➕ Create Release", command=self.add_release,
+                                    bg="#4CAF50", fg="white", relief="flat", padx=10)
+        self.create_btn.grid(row=0, column=2, padx=5, pady=5)
 
-        self.generate_btn = ttk.Button(self, text="📄 Generate Report", command=self.generate_report)
-        self.generate_btn.grid(row=0, column=3, padx=10)
+        # Generate Report Button
+        self.generate_btn = tk.Button(self, text="📄 Generate Report", command=self.generate_report,
+                                      bg="#2196F3", fg="white", relief="flat", padx=10)
+        self.generate_btn.grid(row=0, column=3, padx=5, pady=5)
 
-        self.progress = ttk.Progressbar(self, mode="indeterminate", length=200)
-        self.progress.grid(row=1, column=0, columnspan=4, pady=10)
+        # Download Report Button
+        self.download_btn = tk.Button(self, text="⬇️ Download Report", command=self.download_report,
+                                      bg="#9C27B0", fg="white", relief="flat", padx=10)
+        self.download_btn.grid(row=0, column=4, padx=5, pady=5)
+
+        # Progress bar
+        self.progress = ttk.Progressbar(self, mode="indeterminate", length=250)
+        self.progress.grid(row=1, column=0, columnspan=5, pady=10)
 
     def add_release(self):
         win = tk.Toplevel(self)
@@ -97,6 +102,13 @@ class ControlPanel(tk.Frame):
 
         threading.Thread(target=task).start()
 
+    def download_report(self):
+        file_path = "../reports/pdfs/execution_report.pdf"
+        if os.path.exists(file_path):
+            os.startfile(file_path)
+        else:
+            messagebox.showerror("Error", "Report not found. Please generate it first.")
+
 
 class TestCaseViewer(tk.Frame):
     def __init__(self, parent):
@@ -129,11 +141,20 @@ class TestCaseViewer(tk.Frame):
 
         # ===== Table
         columns = ("ID", "Name", "Product", "Module", "Status", "Executed By", "Date")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
+
+        table_frame = tk.Frame(self, bg=self["bg"])
+        table_frame.pack(fill="both", expand=True, padx=20)
+
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
         for col in columns:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=110, anchor=tk.CENTER)
-        self.tree.pack(fill="both", expand=True, padx=20)
+
+        scroll_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll_y.set)
+
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll_y.pack(side="right", fill="y")
 
         # ===== Update Section
         form = tk.Frame(self, bg=self["bg"])
