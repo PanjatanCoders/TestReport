@@ -102,8 +102,32 @@ class TestCaseViewer(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=parent["bg"])
 
-        tk.Label(self, text="📋 Test Cases", font=("Arial", 14, "bold"), fg="white", bg=self["bg"]).pack(pady=10)
+        tk.Label(self, text="📋 Test Cases", font=("Arial", 14, "bold"), fg="white", bg=self["bg"]).pack(pady=5)
 
+        # ===== Summary
+        self.summary_label = tk.Label(self, text="", font=("Arial", 12), fg="white", bg=self["bg"])
+        self.summary_label.pack()
+
+        # ===== Filters
+        filter_frame = tk.Frame(self, bg=self["bg"])
+        filter_frame.pack(pady=5)
+
+        # Status Filter
+        tk.Label(filter_frame, text="Status:", fg="white", bg=self["bg"]).grid(row=0, column=0)
+        self.status_var = tk.StringVar(value="All")
+        self.status_cb = ttk.Combobox(filter_frame, textvariable=self.status_var, values=["All", "Pass", "Fail", "Skipped", "Blocked", "Retest"], state="readonly", width=12)
+        self.status_cb.grid(row=0, column=1, padx=5)
+
+        # Module Filter
+        tk.Label(filter_frame, text="Module:", fg="white", bg=self["bg"]).grid(row=0, column=2)
+        self.module_var = tk.StringVar(value="All")
+        self.module_cb = ttk.Combobox(filter_frame, textvariable=self.module_var, values=["All"], state="readonly", width=15)
+        self.module_cb.grid(row=0, column=3, padx=5)
+
+        for cb in [self.status_cb, self.module_cb]:
+            cb.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+
+        # ===== Table
         columns = ("ID", "Name", "Product", "Module", "Status", "Executed By", "Date")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
         for col in columns:
@@ -111,13 +135,13 @@ class TestCaseViewer(tk.Frame):
             self.tree.column(col, width=110, anchor=tk.CENTER)
         self.tree.pack(fill="both", expand=True, padx=20)
 
-        # Update section
+        # ===== Update Section
         form = tk.Frame(self, bg=self["bg"])
         form.pack(pady=10)
 
         tk.Label(form, text="Status:", fg="white", bg=self["bg"]).grid(row=0, column=0)
-        self.status_cb = ttk.Combobox(form, values=["Pass", "Fail", "Skipped", "Blocked", "Retest"])
-        self.status_cb.grid(row=0, column=1, padx=5)
+        self.status_update = ttk.Combobox(form, values=["Pass", "Fail", "Skipped", "Blocked", "Retest"])
+        self.status_update.grid(row=0, column=1, padx=5)
 
         tk.Label(form, text="Release:", fg="white", bg=self["bg"]).grid(row=0, column=2)
         self.release_entry = ttk.Entry(form)
@@ -132,31 +156,61 @@ class TestCaseViewer(tk.Frame):
             self.tree.delete(row)
 
         df = fetch_all_test_cases()
+
+        # Populate module filter
+        modules = sorted(df["module_name"].dropna().unique().tolist())
+        self.module_cb["values"] = ["All"] + modules
+
+        # Apply filters
+        selected_status = self.status_var.get().lower()
+        selected_module = self.module_var.get()
+
+        if selected_status != "all":
+            df = df[df["status"].str.lower() == selected_status]
+        if selected_module != "All":
+            df = df[df["module_name"] == selected_module]
+
+        # Emoji Mapping
+        status_icons = {
+            "pass": "✅",
+            "fail": "❌",
+            "skipped": "⏭️",
+            "blocked": "⛔",
+            "retest": "🔁"
+        }
+
+        # Insert rows & collect summary
+        counts = {k: 0 for k in status_icons.keys()}
         for _, row in df.iterrows():
             status = row.get("status", "").lower()
-            tag = status if status else "default"
+            icon = status_icons.get(status, "")
+            display_status = f"{icon} {row.get('status', '')}"
+
             self.tree.insert(
-                "",
-                "end",
+                "", "end",
                 values=(
                     row["test_case_id"],
                     row["test_case_name"],
                     row["product_name"],
                     row["module_name"],
-                    row.get("status", ""),
+                    display_status,
                     row.get("executed_by", ""),
                     row.get("execution_date", ""),
                 ),
-                tags=(tag,)
+                tags=(status,)
             )
+            if status in counts:
+                counts[status] += 1
 
-        # Define row colors based on status
-        self.tree.tag_configure("pass", background="#d4edda")  # Light green
-        self.tree.tag_configure("fail", background="#f8d7da")  # Light red
-        self.tree.tag_configure("skipped", background="#fff3cd")  # Light yellow
-        self.tree.tag_configure("blocked", background="#d6d8db")  # Light gray
-        self.tree.tag_configure("retest", background="#cce5ff")  # Light blue
-        self.tree.tag_configure("default", background="white")
+        # Color rows
+        self.tree.tag_configure("pass", background="#d4edda")
+        self.tree.tag_configure("fail", background="#f8d7da")
+        self.tree.tag_configure("skipped", background="#fff3cd")
+        self.tree.tag_configure("blocked", background="#d6d8db")
+        self.tree.tag_configure("retest", background="#cce5ff")
+
+        summary = f"✅ Passed: {counts['pass']}   ❌ Failed: {counts['fail']}   ⏭️ Skipped: {counts['skipped']}   ⛔ Blocked: {counts['blocked']}   🔁 Retest: {counts['retest']}"
+        self.summary_label.config(text=summary)
 
     def update_selected(self):
         selected = self.tree.selection()
@@ -164,7 +218,7 @@ class TestCaseViewer(tk.Frame):
             messagebox.showwarning("No Selection", "Please select a test case.")
             return
 
-        status = self.status_cb.get()
+        status = self.status_update.get()
         release_name = self.release_entry.get()
         if not status or not release_name:
             messagebox.showerror("Input Error", "Please provide status and release.")
