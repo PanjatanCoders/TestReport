@@ -2,3 +2,4 @@ pyodbc
 pandas
 matplotlib
 fpdf
+PyQt5
