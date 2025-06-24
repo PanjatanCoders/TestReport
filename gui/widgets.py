@@ -1,19 +1,30 @@
+# gui/widgets.py (Updated with dark/light mode icon, view tests, and update results)
+
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import threading
 import time
-import os
+from PIL import Image, ImageTk
 
 from gui.result_fetcher import fetch_all_releases, fetch_test_results_by_release
 from utils.chart_generator import generate_pie_chart
 from utils.pdf_generator import generate_pdf_report
+from utils.result_fetcher import fetch_all_test_cases, get_release_id_by_name
+from utils.update_results import update_test_result
 
 
 class Header(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, toggle_theme_callback):
         super().__init__(parent, bg=parent["bg"])
-        label = tk.Label(self, text="Test Management", font=("Arial", 22, "bold"), fg="white", bg=self["bg"])
-        label.pack()
+        self.parent = parent
+
+        title = tk.Label(self, text="Test Management", font=("Arial", 22, "bold"), fg="white", bg=self["bg"])
+        title.pack(side=tk.LEFT, padx=10)
+
+        # Theme toggle icon button (top right)
+        self.theme_icon = ImageTk.PhotoImage(Image.open("assets/moon.png").resize((24, 24)))
+        self.theme_btn = tk.Button(self, image=self.theme_icon, command=toggle_theme_callback, bd=0, bg=self["bg"])
+        self.theme_btn.pack(side=tk.RIGHT, padx=10)
 
 
 class ReleaseSelector(tk.Frame):
@@ -22,16 +33,13 @@ class ReleaseSelector(tk.Frame):
         self.releases = fetch_all_releases()
         self.selected_release = tk.StringVar()
 
-        label = tk.Label(self, text="Select Release:", fg="white", bg=self["bg"])
-        label.grid(row=0, column=0, padx=10)
-
+        tk.Label(self, text="Select Release:", fg="white", bg=self["bg"]).grid(row=0, column=0, padx=10)
         self.dropdown = ttk.Combobox(self, textvariable=self.selected_release, values=self.releases, state="readonly")
         self.dropdown.grid(row=0, column=1)
         if self.releases:
             self.selected_release.set(self.releases[0])
 
-        self.add_btn = tk.Button(self, text="+ Create Release", command=self.add_release)
-        self.add_btn.grid(row=0, column=2, padx=10)
+        tk.Button(self, text="+ Create Release", command=self.add_release).grid(row=0, column=2, padx=10)
 
     def add_release(self):
         def save():
@@ -46,13 +54,11 @@ class ReleaseSelector(tk.Frame):
 
         win = tk.Toplevel(self)
         win.title("Create Release")
-        win.geometry("400x200")  # Enlarged window
-        win.configure(bg="white")
-
-        tk.Label(win, text="Release Name:", bg="white", font=("Arial", 11)).pack(pady=10)
-        entry = tk.Entry(win, font=("Arial", 11))
-        entry.pack(pady=5, ipadx=10)
-        tk.Button(win, text="Save", command=save, font=("Arial", 10)).pack(pady=10)
+        win.geometry("400x200")
+        tk.Label(win, text="Release Name:").pack(pady=5)
+        entry = tk.Entry(win)
+        entry.pack(pady=5)
+        tk.Button(win, text="Save", command=save).pack(pady=5)
 
 
 class ReportActions(tk.Frame):
@@ -60,21 +66,15 @@ class ReportActions(tk.Frame):
         super().__init__(parent, bg=parent["bg"])
         self.parent = parent
 
-        self.dark_mode = tk.BooleanVar(value=True)
-
-        self.generate_btn = tk.Button(self, text="Generate Report", command=self.run_report)
-        self.generate_btn.grid(row=0, column=0, padx=10)
-
-        self.toggle_dark = tk.Checkbutton(self, text="Dark Mode", variable=self.dark_mode, command=self.toggle_theme)
-        self.toggle_dark.grid(row=0, column=1, padx=10)
+        tk.Button(self, text="Generate Report", command=self.run_report).pack(pady=10)
 
     def run_report(self):
-        progress = ttk.Progressbar(self, mode="indeterminate", length=200)
-        progress.grid(row=1, column=0, columnspan=2, pady=10)
+        progress = ttk.Progressbar(self, mode="indeterminate", length=250)
+        progress.pack(pady=5)
         progress.start()
 
         def task():
-            time.sleep(2)  # Simulated delay
+            time.sleep(2)
             release = self.master.children['!releaseselector'].selected_release.get()
             df = fetch_test_results_by_release(release)
             generate_pie_chart(df)
@@ -85,15 +85,64 @@ class ReportActions(tk.Frame):
 
         threading.Thread(target=task).start()
 
-    def toggle_theme(self):
-        bg = "#1e1e1e" if self.dark_mode.get() else "white"
-        fg = "white" if self.dark_mode.get() else "black"
-        self.parent.configure(bg=bg)
-        for child in self.parent.winfo_children():
-            if hasattr(child, "configure"):
-                child.configure(bg=bg)
-                for sub in child.winfo_children():
-                    if isinstance(sub, tk.Label):
-                        sub.configure(bg=bg, fg=fg)
-                    elif isinstance(sub, tk.Frame):
-                        sub.configure(bg=bg)
+
+class TestCaseViewer(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg=parent["bg"])
+
+        self.label = tk.Label(self, text="Test Case List", font=("Arial", 14, "bold"), fg="white", bg=self["bg"])
+        self.label.pack(pady=10)
+
+        columns = ("ID", "Name", "Product", "Module", "Status", "Date")
+        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=20)
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=120)
+        self.tree.pack(fill="both", expand=True, padx=20)
+
+        self.update_frame = tk.Frame(self, bg=self["bg"])
+        self.update_frame.pack(pady=10)
+
+        tk.Label(self.update_frame, text="Status:", fg="white", bg=self["bg"]).grid(row=0, column=0)
+        self.status = ttk.Combobox(self.update_frame, values=["Pass", "Fail", "Skipped", "Blocked", "Retest"])
+        self.status.grid(row=0, column=1, padx=5)
+
+        tk.Label(self.update_frame, text="Release:", fg="white", bg=self["bg"]).grid(row=0, column=2)
+        self.release_entry = ttk.Entry(self.update_frame)
+        self.release_entry.grid(row=0, column=3, padx=5)
+
+        tk.Button(self.update_frame, text="Update Selected", command=self.update_selected).grid(row=0, column=4, padx=10)
+
+        self.refresh()
+
+    def refresh(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        df = fetch_all_test_cases()
+        for _, row in df.iterrows():
+            self.tree.insert("", "end", values=(row["test_case_id"], row["test_case_name"], row["product_name"], row["module_name"], row["status"], row["execution_date"]))
+
+    def update_selected(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select a test case to update.")
+            return
+
+        status = self.status.get()
+        release_name = self.release_entry.get()
+        if not status or not release_name:
+            messagebox.showerror("Missing Fields", "Please provide both status and release.")
+            return
+
+        release_id = get_release_id_by_name(release_name)
+        if release_id is None:
+            messagebox.showerror("Invalid Release", "Release not found. Please create the release first.")
+            return
+
+        for item in selected:
+            test_case_id = self.tree.item(item, "values")[0]
+            update_test_result(test_case_id, release_id, status)
+
+        messagebox.showinfo("Success", "Test result(s) updated successfully!")
+        self.refresh()
