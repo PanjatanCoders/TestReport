@@ -133,6 +133,8 @@ class TestCaseViewer(tk.Frame):
 
         df = fetch_all_test_cases()
         for _, row in df.iterrows():
+            status = row.get("status", "").lower()
+            tag = status if status else "default"
             self.tree.insert(
                 "",
                 "end",
@@ -145,7 +147,16 @@ class TestCaseViewer(tk.Frame):
                     row.get("executed_by", ""),
                     row.get("execution_date", ""),
                 ),
+                tags=(tag,)
             )
+
+        # Define row colors based on status
+        self.tree.tag_configure("pass", background="#d4edda")  # Light green
+        self.tree.tag_configure("fail", background="#f8d7da")  # Light red
+        self.tree.tag_configure("skipped", background="#fff3cd")  # Light yellow
+        self.tree.tag_configure("blocked", background="#d6d8db")  # Light gray
+        self.tree.tag_configure("retest", background="#cce5ff")  # Light blue
+        self.tree.tag_configure("default", background="white")
 
     def update_selected(self):
         selected = self.tree.selection()
